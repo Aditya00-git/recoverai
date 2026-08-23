@@ -11,7 +11,7 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL
 const ALLOWED_ACTIONS = ['retry_payment', 'send_reminder', 'offer_incentive', 'escalate_human', 'no_action'];
 
 function buildPrompt(item) {
-  return `You are a revenue recovery agent for an Indian payments company. You will be given ONE at-risk revenue item and must decide the single best recovery action.
+  return `You are a revenue recovery agent for an Indian payments company. You will be given ONE at-risk revenue item and must decide the single best recovery action AND draft the message if applicable.
 
 ITEM DETAILS:
 - Type: ${item.type}
@@ -30,14 +30,12 @@ ALLOWED ACTIONS (you MUST pick exactly one of these, nothing else):
 - "escalate_human": flag for manual human review (use when the failure reason is unclear, high-risk, or doesn't fit clean automation)
 - "no_action": do nothing (use if amount is too small to justify any action, or recovery is unlikely)
 
-RULES:
-- Never choose "retry_payment" for "invalid_otp" reason (can't silently retry, needs fresh user input — use "send_reminder" instead)
-- Never choose "retry_payment" more than once conceptually — assume the system already enforces retry limits separately, just pick the best NEXT action
-- Prefer "escalate_human" over guessing when the reason is unclear or unusual
-- Be conservative: financial actions should be explainable and safe, not aggressive
+MESSAGE DRAFTING RULES (only when actionType is "send_reminder" or "offer_incentive" — otherwise messageDraft is empty string, channel "none"):
+- For consumer items: short, natural Hinglish WhatsApp copy (<40 words, channel: "whatsapp").
+- For B2B invoice items: professional English email (<60 words, channel: "email").
 
-Respond with ONLY valid JSON, no markdown, no explanation outside the JSON, in exactly this shape:
-{"actionType": "one_of_the_allowed_actions", "reasoning": "one or two sentence explanation"}`;
+Respond with ONLY valid JSON, no markdown, in exactly this shape:
+{"actionType": "one_of_the_allowed_actions", "reasoning": "one or two sentence explanation", "messageDraft": "message text or empty", "channel": "whatsapp|email|none"}`;
 }
 
 function sleep(ms) {
@@ -76,24 +74,26 @@ async function decideAction(item, retryCount = 0) {
   try {
     const prompt = buildPrompt(item);
     const rawText = await callGemini(prompt);
-
-    // Strip markdown code fences if Gemini wraps the JSON in them despite instructions
     const cleanText = rawText.replace(/```json|```/g, '').trim();
-
     const decision = JSON.parse(cleanText);
 
-    // VALIDATION: never trust the LLM output blindly — enforce the bounded action list ourselves
     if (!ALLOWED_ACTIONS.includes(decision.actionType)) {
       console.warn(`Gemini returned invalid action "${decision.actionType}", defaulting to escalate_human`);
       return {
         actionType: 'escalate_human',
         reasoning: `Agent returned an invalid action type — auto-escalated for safety. Raw response: ${decision.actionType}`,
+        messageDraft: '',
+        channel: 'none',
       };
     }
+
+    const hasMessage = decision.actionType === 'send_reminder' || decision.actionType === 'offer_incentive';
 
     return {
       actionType: decision.actionType,
       reasoning: decision.reasoning || 'No reasoning provided by agent.',
+      messageDraft: hasMessage ? (decision.messageDraft || '') : '',
+      channel: hasMessage ? (decision.channel || 'whatsapp') : 'none',
     };
   } catch (err) {
     const isRateLimit = err.status === 429;
@@ -109,6 +109,8 @@ async function decideAction(item, retryCount = 0) {
     return {
       actionType: 'escalate_human',
       reasoning: `Agent call failed (${err.message.slice(0, 150)}) — auto-escalated for safety.`,
+      messageDraft: '',
+      channel: 'none',
     };
   }
 }
@@ -222,4 +224,72 @@ async function decideBatch(items, retryCount = 0) {
   }
 }
 
-module.exports = { decideAction, decideBatch, ALLOWED_ACTIONS };
+// ---- LIVE SCENARIO SIMULATOR (EPHEMERAL) ----
+function buildSimulatorPrompt(scenarioText) {
+  return `You are RecoverAI, an autonomous revenue recovery agent for an Indian payments platform.
+You are given a raw natural language scenario describing a payment failure, checkout drop-off, or overdue invoice.
+
+SCENARIO:
+"${scenarioText}"
+
+TASK:
+1. Parse and extract key entities (type: failed_payment | abandoned_checkout | overdue_invoice | failed_subscription, amount in INR, method, failure reason, client/customer context).
+2. Check stopping rules: Is amount < ₹100? Is it un-retryable (like invalid OTP)?
+3. Decide the single best recovery action from the bounded menu:
+   - "retry_payment" (only for recoverable consumer payment failures, NEVER for invoices or invalid OTP)
+   - "send_reminder" (polite nudge for abandoned checkouts or early-stage overdue invoices)
+   - "offer_incentive" (for higher-value carts or early-payment invoice discounts)
+   - "escalate_human" (for high-risk, formal notice invoices, large disputed amounts, or unclear reasons)
+   - "no_action" (if amount < ₹100 or recovery impossible)
+4. Provide concise explainability reasoning.
+5. If action is "send_reminder" or "offer_incentive":
+   - For consumer items: draft a warm, natural Hinglish WhatsApp message (<40 words, channel: "whatsapp").
+   - For B2B invoices: draft a formal English email body (<60 words, channel: "email").
+   Otherwise: messageDraft: "", channel: "none".
+6. Estimate expected recovery chance (e.g. 75%).
+
+Respond with ONLY valid JSON, no markdown codeblocks, in exactly this shape:
+{
+  "parsed": {
+    "type": "failed_payment",
+    "amountRupees": 45000,
+    "method": "Netbanking",
+    "detectedIssue": "Bank timeout during 2 AM off-peak transaction"
+  },
+  "guardrailStatus": "Passed stopping rules",
+  "actionType": "retry_payment",
+  "reasoning": "Transient gateway timeout is safe to retry automatically.",
+  "messageDraft": "",
+  "channel": "none",
+  "recoveryChance": "70%"
+}`;
+}
+
+async function simulateScenario(scenarioText) {
+  try {
+    const prompt = buildSimulatorPrompt(scenarioText);
+    const rawText = await callGemini(prompt);
+    const cleanText = rawText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(cleanText);
+
+    if (!ALLOWED_ACTIONS.includes(result.actionType)) {
+      result.actionType = 'escalate_human';
+      result.reasoning = 'Agent returned unknown action — defaulted to human escalation.';
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Simulator failed:', err);
+    return {
+      parsed: { type: 'unknown', amountRupees: 0, method: 'N/A', detectedIssue: 'Parsing failed' },
+      guardrailStatus: 'Error during analysis',
+      actionType: 'escalate_human',
+      reasoning: `AI simulation failed (${err.message.slice(0, 100)}) — routed to manual review.`,
+      messageDraft: '',
+      channel: 'none',
+      recoveryChance: '0%',
+    };
+  }
+}
+
+module.exports = { decideAction, decideBatch, simulateScenario, ALLOWED_ACTIONS };

@@ -7,23 +7,29 @@ const {
   MIN_AMOUNT_FOR_ACTION,
 } = require('../config/stoppingRules');
 
-const BATCH_SIZE = 8; // items per Gemini call — keeps total API calls low for tight free-tier quotas
-const DELAY_BETWEEN_BATCHES_MS = 4000; // spread batches out to respect per-minute limits too
+const BATCH_SIZE = 8;
+const DELAY_BETWEEN_BATCHES_MS = 4000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Maps a detection item's "type" field to the RecoveryAction schema's targetType enum
 function getTargetType(item) {
+  if (item.type === 'failed_subscription') return 'subscription';
   if (item.type === 'failed_payment') return 'transaction';
   if (item.type === 'abandoned_checkout') return 'checkout';
   if (item.type === 'overdue_invoice') return 'invoice';
-  return 'transaction'; // fallback, should never hit this
+  return 'transaction';
 }
 
-// Checks stopping rules BEFORE calling the agent — saves an API call and enforces hard limits.
 async function checkStoppingRules(item) {
+  if (item.recoveryBucket === 'ptp_grace_period') {
+    return {
+      blocked: true,
+      reason: `Promise-to-Pay commitment active (promised by ${new Date(item.ptpDate).toLocaleDateString('en-IN')}) — dunning paused.`,
+    };
+  }
+
   if (item.amount < MIN_AMOUNT_FOR_ACTION) {
     return { blocked: true, reason: `Amount below minimum threshold (₹${MIN_AMOUNT_FOR_ACTION / 100})` };
   }
@@ -49,7 +55,6 @@ async function checkStoppingRules(item) {
   return { blocked: false, attemptNumber: previousAttempts.length + 1 };
 }
 
-// Simulates executing the chosen action — see Day 4 notes on why this is simulated.
 function simulateExecution(actionType) {
   const successProbabilities = {
     retry_payment: 0.55,
@@ -65,13 +70,13 @@ function simulateExecution(actionType) {
   return Math.random() < successChance ? 'success' : 'failed';
 }
 
-// Saves a stopping-rule-blocked item (no agent call needed)
 async function saveBlockedAction(item, reason) {
   const action = await RecoveryAction.create({
     targetType: getTargetType(item),
     targetId: item.targetId,
     actionType: 'no_action',
     reasoning: `Stopping rule triggered: ${reason}`,
+    ptpDate: item.ptpDate || null,
     outcome: 'stopped_by_rule',
     amountRecovered: 0,
   });
@@ -85,7 +90,6 @@ async function saveBlockedAction(item, reason) {
   return action;
 }
 
-// Saves an executed action after the agent has made a decision
 async function saveExecutedAction(item, decision, attemptNumber) {
   await AuditLog.create({
     event: 'agent_decided',
@@ -102,6 +106,8 @@ async function saveExecutedAction(item, decision, attemptNumber) {
     reasoning: decision.reasoning,
     messageDraft: decision.messageDraft || '',
     channel: decision.channel || 'none',
+    retrySchedule: item.retrySchedule || decision.retrySchedule || '',
+    ptpDate: item.ptpDate || null,
     attemptNumber,
     outcome,
     amountRecovered,
@@ -116,12 +122,10 @@ async function saveExecutedAction(item, decision, attemptNumber) {
   return action;
 }
 
-// Processes a whole batch of at-risk items, using BATCHED Gemini calls to conserve quota.
 async function processBatch(items) {
   const results = [];
-  const itemsNeedingDecision = []; // items that passed stopping-rule checks, need the agent
+  const itemsNeedingDecision = [];
 
-  // Step 1: run stopping-rule checks for everything first (cheap, no API calls)
   for (const item of items) {
     const ruleCheck = await checkStoppingRules(item);
 
@@ -133,7 +137,6 @@ async function processBatch(items) {
     }
   }
 
-  // Step 2: process the remaining items in small batches, one Gemini call per batch
   for (let i = 0; i < itemsNeedingDecision.length; i += BATCH_SIZE) {
     const chunk = itemsNeedingDecision.slice(i, i + BATCH_SIZE);
     const decisions = await decideBatch(chunk.map((c) => c.item));
@@ -145,7 +148,6 @@ async function processBatch(items) {
       results.push(action);
     }
 
-    // Pause between batches (not needed after the last one)
     if (i + BATCH_SIZE < itemsNeedingDecision.length) {
       await sleep(DELAY_BETWEEN_BATCHES_MS);
     }

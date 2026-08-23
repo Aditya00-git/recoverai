@@ -2,34 +2,42 @@ const mongoose = require('mongoose');
 
 const recoveryActionSchema = new mongoose.Schema({
   targetType: {
-    type: String, // what this recovery action is for
-    enum: ['transaction', 'checkout', 'invoice'],
+    type: String,
+    enum: ['transaction', 'checkout', 'invoice', 'subscription'],
     required: true,
   },
   targetId: {
-    type: mongoose.Schema.Types.ObjectId, // refers to a Transaction or Checkout _id
+    type: mongoose.Schema.Types.ObjectId,
     required: true,
   },
   actionType: {
-    type: String, // the bounded menu of actions the agent can choose from
+    type: String,
     enum: ['retry_payment', 'send_reminder', 'offer_incentive', 'escalate_human', 'no_action'],
     required: true,
   },
   reasoning: {
-    type: String, // the LLM's explanation for why it chose this action (explainability)
+    type: String,
     required: true,
   },
   messageDraft: {
-    type: String, // the actual generated recovery message (WhatsApp/email text), empty if not applicable
+    type: String,
     default: '',
   },
   channel: {
-    type: String, // which channel this message is meant for
+    type: String,
     enum: ['whatsapp', 'email', 'none'],
     default: 'none',
   },
+  retrySchedule: {
+    type: String, // e.g. "1st of Month (Salary sync)" or "T+24h (Off-peak window)"
+    default: '',
+  },
+  ptpDate: {
+    type: Date, // tracked Promise-to-Pay commitment date if applicable
+    default: null,
+  },
   attemptNumber: {
-    type: Number, // tracks retry count, enforced against stopping rules
+    type: Number,
     default: 1,
   },
   outcome: {
@@ -38,7 +46,7 @@ const recoveryActionSchema = new mongoose.Schema({
     default: 'pending',
   },
   amountRecovered: {
-    type: Number, // paise, filled in if outcome = success
+    type: Number,
     default: 0,
   },
   executedAt: {

@@ -47,7 +47,7 @@ function AuditTrailTable({ recentActions }) {
         <div>
           <h3 className="font-display text-xl">Audit Trail</h3>
           <p className="text-paper-dim text-xs mt-1 max-w-xl">
-            "Reasoning" explains why this action was chosen over the original failure. "Outcome" reflects whether that specific action converted the customer.
+            Immutable log of recovery actions, mandate retry sequences, and natural language explainability.
           </p>
         </div>
         <span className="font-mono text-[11px] text-paper-dim uppercase tracking-wider shrink-0 ml-4">
@@ -55,12 +55,12 @@ function AuditTrailTable({ recentActions }) {
         </span>
       </div>
 
-      <div className="max-h-[520px] overflow-y-auto ledger-scroll">
+      <div className="max-h-[560px] overflow-y-auto ledger-scroll">
         <table className="w-full text-sm">
           <thead className="bg-panel-raised text-paper-dim sticky top-0">
             <tr>
               <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Type</th>
-              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Action</th>
+              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Action & Schedule</th>
               <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Reasoning</th>
               <th className="text-right px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Amount</th>
               <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Outcome</th>
@@ -69,17 +69,40 @@ function AuditTrailTable({ recentActions }) {
           <tbody>
             {recentActions.map((action) => {
               const hasMessage = action.messageDraft && action.messageDraft.length > 0;
+              const hasSchedule = action.retrySchedule && action.retrySchedule.length > 0;
+              const hasPtp = action.ptpDate;
+
               return (
                 <tr key={action._id} className="border-t border-hairline/60 hover:bg-panel-raised/50 transition-colors">
                   <td className="px-6 py-3.5 text-paper-dim capitalize text-xs">
-                    {action.targetType}
+                    <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-panel border border-hairline">
+                      {action.targetType}
+                    </span>
                   </td>
-                  <td className="px-4 py-3.5 font-medium">
-                    <div>{ACTION_LABELS[action.actionType] || action.actionType}</div>
+                  <td className="px-4 py-3.5">
+                    <div className="font-medium text-sm">
+                      {ACTION_LABELS[action.actionType] || action.actionType}
+                    </div>
+
+                    {/* Mandate Schedule Badge */}
+                    {hasSchedule && (
+                      <div className="font-mono text-[10px] text-mint mt-1 flex items-center gap-1">
+                        <span>🔄</span> {action.retrySchedule}
+                      </div>
+                    )}
+
+                    {/* Promise to Pay Badge */}
+                    {hasPtp && (
+                      <div className="font-mono text-[10px] text-gold mt-1 flex items-center gap-1">
+                        <span>📅</span> PTP: {new Date(action.ptpDate).toLocaleDateString('en-IN')}
+                      </div>
+                    )}
+
+                    {/* View Message Link */}
                     {hasMessage && (
                       <button
                         onClick={() => setPreviewAction(action)}
-                        className="font-mono text-[10px] uppercase tracking-wider text-gold hover:text-amber mt-1"
+                        className="font-mono text-[10px] uppercase tracking-wider text-gold hover:text-amber mt-1 block"
                       >
                         View Message →
                       </button>

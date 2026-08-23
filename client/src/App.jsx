@@ -5,6 +5,8 @@ import HeadlineCards from './components/HeadlineCards';
 import ActionBreakdownChart from './components/ActionBreakdownChart';
 import FunnelChart from './components/FunnelChart';
 import AuditTrailTable from './components/AuditTrailTable';
+import ScenarioSimulator from './components/ScenarioSimulator';
+import EscalationCenter from './components/EscalationCenter';
 
 function App() {
   const [summary, setSummary] = useState(null);
@@ -48,7 +50,7 @@ function App() {
   return (
     <div className="min-h-screen bg-ink text-paper">
       <div className="max-w-6xl mx-auto px-6 md:px-8 py-10">
-        {/* Header — letterhead style */}
+        {/* Header */}
         <div className="flex items-start justify-between mb-10 pb-6 border-b border-hairline">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold mb-2">
@@ -106,6 +108,12 @@ function App() {
         {summary && (
           <>
             <HeadlineCards headline={summary.headline} />
+
+            {/* HUMAN-IN-THE-LOOP ESCALATION CENTER */}
+            <EscalationCenter onResolved={loadSummary} />
+
+            {/* LIVE SCENARIO SANDBOX */}
+            <ScenarioSimulator />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <ActionBreakdownChart actionTypeBreakdown={summary.actionTypeBreakdown} />
