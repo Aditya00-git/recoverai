@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
 const recoveryActionSchema = new mongoose.Schema({
-  targetType: {
+    targetType: {
     type: String, // what this recovery action is for
-    enum: ['transaction', 'checkout'],
+    enum: ['transaction', 'checkout', 'invoice'],
     required: true,
   },
   targetId: {

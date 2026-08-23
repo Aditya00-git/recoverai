@@ -1,0 +1,96 @@
+import { formatRupees } from '../api/dashboardApi';
+
+const ACTION_LABELS = {
+  retry_payment: 'Retry Payment',
+  send_reminder: 'Send Reminder',
+  offer_incentive: 'Offer Incentive',
+  escalate_human: 'Escalate to Human',
+  no_action: 'No Action',
+};
+
+const OUTCOME_META = {
+  success: { label: 'Recovered', color: '#3FBF8F' },
+  failed: { label: 'Failed', color: '#E1654B' },
+  pending: { label: 'Pending', color: '#D4A24C' },
+  stopped_by_rule: { label: 'Stopped', color: '#8B8A85' },
+};
+
+function OutcomeMark({ outcome }) {
+  const meta = OUTCOME_META[outcome] || OUTCOME_META.pending;
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+      <span
+        className="w-1.5 h-1.5 rounded-full inline-block"
+        style={{ backgroundColor: meta.color }}
+      />
+      <span style={{ color: meta.color }}>{meta.label}</span>
+    </span>
+  );
+}
+
+function AuditTrailTable({ recentActions }) {
+  if (!recentActions || recentActions.length === 0) {
+    return (
+      <div className="bg-panel rounded-lg p-6 border border-hairline text-paper-dim">
+        No recovery actions logged yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-panel rounded-lg border border-hairline overflow-hidden">
+      <div className="px-6 py-5 border-b border-hairline flex items-baseline justify-between">
+        <div>
+          <h3 className="font-display text-xl">Audit Trail</h3>
+          <p className="text-paper-dim text-xs mt-1 max-w-xl">
+            "Reasoning" explains why this action was chosen over the original failure. "Outcome" reflects whether that specific action converted the customer.
+          </p>
+        </div>
+        <span className="font-mono text-[11px] text-paper-dim uppercase tracking-wider shrink-0 ml-4">
+          {recentActions.length} entries
+        </span>
+      </div>
+
+      <div className="max-h-[520px] overflow-y-auto ledger-scroll">
+        <table className="w-full text-sm">
+          <thead className="bg-panel-raised text-paper-dim sticky top-0">
+            <tr>
+              <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Type</th>
+              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Action</th>
+              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Reasoning</th>
+              <th className="text-right px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Amount</th>
+              <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentActions.map((action) => (
+              <tr key={action._id} className="border-t border-hairline/60 hover:bg-panel-raised/50 transition-colors">
+                <td className="px-6 py-3.5 text-paper-dim capitalize text-xs">
+                  {action.targetType}
+                </td>
+                <td className="px-4 py-3.5 font-medium">
+                  {ACTION_LABELS[action.actionType] || action.actionType}
+                </td>
+                <td className="px-4 py-3.5 text-paper-dim text-xs leading-relaxed max-w-md">
+                  {action.reasoning}
+                </td>
+                <td className="px-4 py-3.5 text-right font-mono tabular">
+                  {action.outcome === 'success' ? (
+                    <span style={{ color: '#3FBF8F' }}>{formatRupees(action.amountRecovered)}</span>
+                  ) : (
+                    <span className="text-hairline">—</span>
+                  )}
+                </td>
+                <td className="px-6 py-3.5">
+                  <OutcomeMark outcome={action.outcome} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default AuditTrailTable;

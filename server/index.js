@@ -9,6 +9,7 @@ app.use(express.json());
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/detect', require('./routes/detectionRoutes'));
 app.use('/api/agent', require('./routes/agentRoutes'));
+app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'RecoverAI backend is running' });

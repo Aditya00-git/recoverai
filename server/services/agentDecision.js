@@ -113,4 +113,100 @@ async function decideAction(item, retryCount = 0) {
   }
 }
 
-module.exports = { decideAction, ALLOWED_ACTIONS };
+function buildBatchPrompt(items) {
+  const itemBlocks = items.map((item, i) => {
+    if (item.type === 'overdue_invoice') {
+      return `
+ITEM ${i + 1} (B2B OVERDUE INVOICE):
+- Client: ${item.customerId} (${item.clientTier} tier)
+- Invoice: ${item.invoiceNumber}
+- Amount: ₹${(item.amount / 100).toFixed(2)}
+- Days overdue: ${item.daysOverdue}
+- Aging bucket: ${item.agingBucket}
+- Pre-classified escalation stage: ${item.recoveryBucket}
+- Priority score: ${item.priorityScore}
+IMPORTANT: This is a B2B receivable, NOT a payment failure. "retry_payment" is NOT a valid choice for this item — there is no payment attempt to retry, only an unpaid invoice to chase.`;
+    }
+
+    return `
+ITEM ${i + 1}:
+- Type: ${item.type}
+- Amount: ₹${(item.amount / 100).toFixed(2)}
+- Recovery bucket (pre-classified): ${item.recoveryBucket}
+- Reason (if payment failure): ${item.errorReason || 'N/A'}
+- Method used: ${item.method || 'N/A'}
+- Is subscription: ${item.isSubscription || false}
+- Priority score: ${item.priorityScore}`;
+  }).join('\n');
+
+  return `You are a revenue recovery agent for an Indian payments company. You will be given MULTIPLE at-risk revenue items — these may be consumer payment failures, abandoned checkouts, OR overdue B2B invoices. For EACH item, decide the single best recovery action.
+
+${itemBlocks}
+
+ALLOWED ACTIONS (you MUST pick exactly one per item, nothing else):
+- "retry_payment": attempt the payment again (ONLY for failed consumer payments with transient/recoverable reasons — NEVER for overdue invoices)
+- "send_reminder": nudge the customer/client to complete payment. For invoices in "gentle_nudge" stage, this is a polite payment chaser.
+- "offer_incentive": reminder WITH a small incentive. For invoices, this can mean an early-payment discount offer instead of a monetary incentive.
+- "escalate_human": flag for manual human review. For invoices in "finance_head_escalation" or "formal_notice" stages, this is usually correct — B2B collections at that stage need human judgment, not automation.
+- "no_action": do nothing (amount too small, or recovery unlikely)
+
+RULES:
+- Never choose "retry_payment" for "invalid_otp" or for any "overdue_invoice" type item
+- For invoices in the "formal_notice" aging bucket (30+ days overdue), strongly prefer "escalate_human" — sending automated formal notices to B2B clients without human review is risky
+- For invoices in "gentle_nudge" bucket, "send_reminder" is usually right unless the amount is very high, in which case consider "escalate_human" for a more personal touch
+- Prefer "escalate_human" over guessing when the reason is unclear
+- Be conservative: financial actions should be explainable and safe
+
+Respond with ONLY a valid JSON array, no markdown, no explanation outside the JSON, with exactly ${items.length} objects in the SAME ORDER as the items above, in exactly this shape:
+[{"index": 1, "actionType": "...", "reasoning": "one sentence"}, {"index": 2, "actionType": "...", "reasoning": "one sentence"}, ...]`;
+}
+
+async function decideBatch(items, retryCount = 0) {
+  const MAX_RETRIES = 2;
+
+  try {
+    const prompt = buildBatchPrompt(items);
+    const rawText = await callGemini(prompt);
+    const cleanText = rawText.replace(/```json|```/g, '').trim();
+    const decisions = JSON.parse(cleanText);
+
+    if (!Array.isArray(decisions)) {
+      throw new Error('Batch response was not an array');
+    }
+
+    // Map back to items in order, validating each independently
+    return items.map((item, i) => {
+      const decision = decisions.find((d) => d.index === i + 1) || decisions[i];
+
+      if (!decision || !ALLOWED_ACTIONS.includes(decision.actionType)) {
+        return {
+          actionType: 'escalate_human',
+          reasoning: 'Agent returned an invalid or missing decision for this item — auto-escalated for safety.',
+        };
+      }
+
+      return {
+        actionType: decision.actionType,
+        reasoning: decision.reasoning || 'No reasoning provided by agent.',
+      };
+    });
+  } catch (err) {
+    const isRateLimit = err.status === 429;
+
+    if (isRateLimit && retryCount < MAX_RETRIES) {
+      const waitMs = 5000 * (retryCount + 1);
+      console.warn(`Batch rate limited, retrying in ${waitMs / 1000}s...`);
+      await sleep(waitMs);
+      return decideBatch(items, retryCount + 1);
+    }
+
+    console.error('Batch decision failed:', err.message);
+    // Fail safe: escalate the ENTIRE batch rather than guess
+    return items.map(() => ({
+      actionType: 'escalate_human',
+      reasoning: `Batch agent call failed (${err.message.slice(0, 120)}) — auto-escalated for safety.`,
+    }));
+  }
+}
+
+module.exports = { decideAction, decideBatch, ALLOWED_ACTIONS };

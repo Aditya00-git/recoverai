@@ -1,96 +1,124 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL;
-const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
+import { motion } from 'framer-motion';
+import { fetchDashboardSummary, runAgent, formatRupees } from './api/dashboardApi';
+import HeadlineCards from './components/HeadlineCards';
+import ActionBreakdownChart from './components/ActionBreakdownChart';
+import FunnelChart from './components/FunnelChart';
+import AuditTrailTable from './components/AuditTrailTable';
 
 function App() {
-  const [status, setStatus] = useState('Checking backend...');
-  const [log, setLog] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    axios.get(`${API_URL}/api/health`)
-      .then((res) => setStatus(res.data.message))
-      .catch(() => setStatus('Could not reach backend ❌'));
-  }, []);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState(null);
 
-  const addLog = (msg) => setLog((prev) => [msg, ...prev]);
-
-  const handleTestPayment = async () => {
+  const loadSummary = async () => {
+    setLoading(true);
     try {
-      const amount = 50000; // ₹500 in paise — change this each time for variety
-      const customerId = `cust_manual_${Math.floor(Math.random() * 1000)}`;
-
-      // 1. Create order on backend
-      const { data: order } = await axios.post(`${API_URL}/api/payments/create-order`, {
-        amount,
-        customerId,
-      });
-
-      // 2. Open Razorpay Checkout
-      const options = {
-        key: RAZORPAY_KEY_ID,
-        amount: order.amount,
-        currency: order.currency,
-        order_id: order.id,
-        name: 'RecoverAI Test Merchant',
-        description: 'Manual test transaction for seed data',
-        handler: async function (response) {
-          // Fires on SUCCESS
-          addLog(`✅ Success: ${response.razorpay_payment_id}`);
-          await axios.post(`${API_URL}/api/payments/save-success`, {
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_order_id: response.razorpay_order_id,
-            amount,
-            customerId,
-          });
-          addLog('Saved to database ✅');
-        },
-        modal: {
-          ondismiss: function () {
-            addLog('Checkout closed without completing payment');
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-
-      // Fires on FAILURE (e.g. you click "Failure" on the mock bank page)
-      rzp.on('payment.failed', async function (response) {
-        addLog(`❌ Failed: ${response.error.description}`);
-        await axios.post(`${API_URL}/api/payments/save-failure`, {
-          error: response.error,
-          amount,
-          customerId,
-        });
-        addLog('Saved failure to database ✅');
-      });
-
-      rzp.open();
+      const data = await fetchDashboardSummary();
+      setSummary(data);
+      setError(null);
     } catch (err) {
-      addLog(`Error: ${err.message}`);
+      setError('Could not load dashboard data. Is the backend running?');
+    } finally {
+      setLoading(false);
     }
   };
 
+  const handleRunAgent = async () => {
+    setRunning(true);
+    setRunResult(null);
+    try {
+      const result = await runAgent();
+      setRunResult(result.batchResult);
+      await loadSummary();
+    } catch (err) {
+      setError('Agent run failed. Check the backend console for details.');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSummary();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-3xl font-bold mb-2">RecoverAI</h1>
-      <p className="text-lg mb-6">{status}</p>
+    <div className="min-h-screen bg-ink text-paper">
+      <div className="max-w-6xl mx-auto px-6 md:px-8 py-10">
+        {/* Header — letterhead style */}
+        <div className="flex items-start justify-between mb-10 pb-6 border-b border-hairline">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold mb-2">
+              Revenue Recovery Ledger
+            </p>
+            <h1 className="font-display text-4xl md:text-5xl italic font-light">
+              RecoverAI
+            </h1>
+          </div>
+          <div className="flex gap-3 mt-2">
+            <button
+              onClick={loadSummary}
+              className="font-mono text-[11px] uppercase tracking-wider px-4 py-2.5 border border-hairline rounded text-paper-dim hover:text-paper hover:border-paper-dim transition-colors"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={handleRunAgent}
+              disabled={running}
+              className="font-mono text-[11px] uppercase tracking-wider px-4 py-2.5 rounded bg-gold text-ink font-semibold hover:bg-amber disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {running && (
+                <span className="inline-block w-3 h-3 border-2 border-ink/30 border-t-ink rounded-full animate-spin" />
+              )}
+              {running ? 'Running' : 'Run Agent'}
+            </button>
+          </div>
+        </div>
 
-      <button
-        onClick={handleTestPayment}
-        className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold"
-      >
-        Run Test Payment
-      </button>
+        {loading && (
+          <p className="font-mono text-sm text-paper-dim mb-6">Loading ledger...</p>
+        )}
+        {error && (
+          <p className="font-mono text-sm text-rust mb-6">{error}</p>
+        )}
 
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold mb-2">Log</h2>
-        <ul className="space-y-1 text-sm font-mono">
-          {log.map((entry, i) => (
-            <li key={i} className="text-gray-300">{entry}</li>
-          ))}
-        </ul>
+        {runResult && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="border border-gold-dim bg-gold/5 rounded-lg px-6 py-4 mb-8"
+          >
+            <p className="font-mono text-[11px] uppercase tracking-wider text-gold mb-1">
+              Agent Run Complete
+            </p>
+            <p className="text-sm text-paper-dim">
+              Processed <span className="text-paper font-medium">{runResult.processedCount}</span> items ·{' '}
+              <span className="text-mint font-medium">{runResult.successCount} succeeded</span> ·{' '}
+              {runResult.stoppedCount} blocked by stopping rules ·{' '}
+              <span className="text-gold font-medium">{formatRupees(runResult.totalRecovered)}</span> recovered this run
+            </p>
+          </motion.div>
+        )}
+
+        {summary && (
+          <>
+            <HeadlineCards headline={summary.headline} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <ActionBreakdownChart actionTypeBreakdown={summary.actionTypeBreakdown} />
+              <FunnelChart funnel={summary.funnel} />
+            </div>
+
+            <AuditTrailTable recentActions={summary.recentActions} />
+          </>
+        )}
+
+        <p className="font-mono text-[10px] text-paper-dim/60 text-center mt-10 uppercase tracking-widest">
+          RecoverAI · AI Revenue Recovery · Built for Razorpay AI Builder Internship
+        </p>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const Checkout = require('../models/Checkout');
+const Invoice = require('../models/Invoice');
 
 // ---- RECOVERY BUCKET MAPPING ----
 // Maps a failure reason to a recovery strategy category.
@@ -78,14 +79,57 @@ async function detectAbandonedCheckouts() {
   }));
 }
 
-// ---- MAIN ENTRY POINT ----
+// ---- OVERDUE INVOICE DETECTOR (B2B RECEIVABLES) ----
+// Aging buckets, each mapped to an escalation ladder rung — the longer overdue,
+// the firmer the recommended tone. Enterprise clients get one rung of leniency
+// (relationship-conscious collections is standard real-world B2B practice).
+function getAgingBucketAndBucketName(daysOverdue, clientTier) {
+  const leniencyDays = clientTier === 'enterprise' ? 7 : 0; // enterprise gets a grace window
+  const adjustedDays = Math.max(0, daysOverdue - leniencyDays);
+
+  if (adjustedDays <= 15) {
+    return { agingBucket: '1-15 days', recoveryBucket: 'gentle_nudge' };
+  } else if (adjustedDays <= 30) {
+    return { agingBucket: '16-30 days', recoveryBucket: 'finance_head_escalation' };
+  } else {
+    return { agingBucket: '30+ days', recoveryBucket: 'formal_notice' };
+  }
+}
+
+async function detectOverdueInvoices() {
+  const overdueInvoices = await Invoice.find({ status: 'overdue' }).lean();
+  const now = Date.now();
+
+  return overdueInvoices.map((inv) => {
+    const daysOverdue = Math.floor((now - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24));
+    const { agingBucket, recoveryBucket } = getAgingBucketAndBucketName(daysOverdue, inv.clientTier);
+
+    return {
+      type: 'overdue_invoice',
+      targetId: inv._id,
+      customerId: inv.clientName, // reuse the same field name the pipeline expects
+      amount: inv.amount,
+      clientTier: inv.clientTier,
+      invoiceNumber: inv.invoiceNumber,
+      daysOverdue,
+      agingBucket,
+      recoveryBucket,
+      priorityScore: calculatePriorityScore(inv.amount, inv.dueDate),
+      createdAt: inv.createdAt,
+      dueDate: inv.dueDate,
+    };
+  });
+}
+
+
 async function runDetection() {
-  const [failedPayments, abandonedCheckouts] = await Promise.all([
+  const [failedPayments, abandonedCheckouts, overdueInvoices] = await Promise.all([
     detectFailedPayments(),
     detectAbandonedCheckouts(),
+    detectOverdueInvoices(),
   ]);
 
-  const allItems = [...failedPayments, ...abandonedCheckouts]
+  const allItems = [...failedPayments, ...abandonedCheckouts, ...overdueInvoices]
     .sort((a, b) => b.priorityScore - a.priorityScore); // highest priority first
 
   const totalAtRisk = allItems.reduce((sum, item) => sum + item.amount, 0);
@@ -101,9 +145,10 @@ async function runDetection() {
     totalItemsFlagged: allItems.length,
     failedPaymentsCount: failedPayments.length,
     abandonedCheckoutsCount: abandonedCheckouts.length,
+    overdueInvoicesCount: overdueInvoices.length,
     bucketBreakdown,
     items: allItems,
   };
 }
 
-module.exports = { runDetection, detectFailedPayments, detectAbandonedCheckouts };
+module.exports = { runDetection, detectFailedPayments, detectAbandonedCheckouts, detectOverdueInvoices };
