@@ -100,6 +100,8 @@ async function saveExecutedAction(item, decision, attemptNumber) {
     targetId: item.targetId,
     actionType: decision.actionType,
     reasoning: decision.reasoning,
+    messageDraft: decision.messageDraft || '',
+    channel: decision.channel || 'none',
     attemptNumber,
     outcome,
     amountRecovered,

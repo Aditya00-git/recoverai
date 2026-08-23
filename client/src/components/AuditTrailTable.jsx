@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { formatRupees } from '../api/dashboardApi';
+import MessagePreviewModal from './MessagePreviewModal';
 
 const ACTION_LABELS = {
   retry_payment: 'Retry Payment',
@@ -29,6 +31,8 @@ function OutcomeMark({ outcome }) {
 }
 
 function AuditTrailTable({ recentActions }) {
+  const [previewAction, setPreviewAction] = useState(null);
+
   if (!recentActions || recentActions.length === 0) {
     return (
       <div className="bg-panel rounded-lg p-6 border border-hairline text-paper-dim">
@@ -63,32 +67,51 @@ function AuditTrailTable({ recentActions }) {
             </tr>
           </thead>
           <tbody>
-            {recentActions.map((action) => (
-              <tr key={action._id} className="border-t border-hairline/60 hover:bg-panel-raised/50 transition-colors">
-                <td className="px-6 py-3.5 text-paper-dim capitalize text-xs">
-                  {action.targetType}
-                </td>
-                <td className="px-4 py-3.5 font-medium">
-                  {ACTION_LABELS[action.actionType] || action.actionType}
-                </td>
-                <td className="px-4 py-3.5 text-paper-dim text-xs leading-relaxed max-w-md">
-                  {action.reasoning}
-                </td>
-                <td className="px-4 py-3.5 text-right font-mono tabular">
-                  {action.outcome === 'success' ? (
-                    <span style={{ color: '#3FBF8F' }}>{formatRupees(action.amountRecovered)}</span>
-                  ) : (
-                    <span className="text-hairline">—</span>
-                  )}
-                </td>
-                <td className="px-6 py-3.5">
-                  <OutcomeMark outcome={action.outcome} />
-                </td>
-              </tr>
-            ))}
+            {recentActions.map((action) => {
+              const hasMessage = action.messageDraft && action.messageDraft.length > 0;
+              return (
+                <tr key={action._id} className="border-t border-hairline/60 hover:bg-panel-raised/50 transition-colors">
+                  <td className="px-6 py-3.5 text-paper-dim capitalize text-xs">
+                    {action.targetType}
+                  </td>
+                  <td className="px-4 py-3.5 font-medium">
+                    <div>{ACTION_LABELS[action.actionType] || action.actionType}</div>
+                    {hasMessage && (
+                      <button
+                        onClick={() => setPreviewAction(action)}
+                        className="font-mono text-[10px] uppercase tracking-wider text-gold hover:text-amber mt-1"
+                      >
+                        View Message →
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5 text-paper-dim text-xs leading-relaxed max-w-md">
+                    {action.reasoning}
+                  </td>
+                  <td className="px-4 py-3.5 text-right font-mono tabular">
+                    {action.outcome === 'success' ? (
+                      <span style={{ color: '#3FBF8F' }}>{formatRupees(action.amountRecovered)}</span>
+                    ) : (
+                      <span className="text-hairline">—</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <OutcomeMark outcome={action.outcome} />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      <MessagePreviewModal
+        isOpen={!!previewAction}
+        onClose={() => setPreviewAction(null)}
+        message={previewAction?.messageDraft}
+        channel={previewAction?.channel}
+        reasoning={previewAction?.reasoning}
+      />
     </div>
   );
 }

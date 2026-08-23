@@ -139,7 +139,7 @@ ITEM ${i + 1}:
 - Priority score: ${item.priorityScore}`;
   }).join('\n');
 
-  return `You are a revenue recovery agent for an Indian payments company. You will be given MULTIPLE at-risk revenue items — these may be consumer payment failures, abandoned checkouts, OR overdue B2B invoices. For EACH item, decide the single best recovery action.
+  return `You are a revenue recovery agent for an Indian payments company. You will be given MULTIPLE at-risk revenue items — these may be consumer payment failures, abandoned checkouts, OR overdue B2B invoices. For EACH item, decide the single best recovery action AND, if the action involves contacting someone, draft the actual message.
 
 ${itemBlocks}
 
@@ -157,8 +157,13 @@ RULES:
 - Prefer "escalate_human" over guessing when the reason is unclear
 - Be conservative: financial actions should be explainable and safe
 
+MESSAGE DRAFTING RULES (only when actionType is "send_reminder" or "offer_incentive" — otherwise leave messageDraft as an empty string and channel as "none"):
+- For consumer items (failed_payment, abandoned_checkout): write a short, warm WhatsApp-style message in natural Hinglish (mix of Hindi and English, like how Indian businesses actually message customers — e.g. "Hi! Aapka payment complete nahi hua tha..."). Keep it under 40 words. Set channel to "whatsapp".
+- For overdue_invoice items: write a short, professional B2B email body (formal English, mention invoice number and amount, polite but clear about the due date). Keep it under 60 words. Set channel to "email".
+- Never invent discount percentages or specific numbers not implied by the item data — keep incentive language generic (e.g. "a small discount") unless the amount clearly supports a specific figure.
+
 Respond with ONLY a valid JSON array, no markdown, no explanation outside the JSON, with exactly ${items.length} objects in the SAME ORDER as the items above, in exactly this shape:
-[{"index": 1, "actionType": "...", "reasoning": "one sentence"}, {"index": 2, "actionType": "...", "reasoning": "one sentence"}, ...]`;
+[{"index": 1, "actionType": "...", "reasoning": "one sentence", "messageDraft": "...", "channel": "whatsapp|email|none"}, ...]`;
 }
 
 async function decideBatch(items, retryCount = 0) {
@@ -182,12 +187,18 @@ async function decideBatch(items, retryCount = 0) {
         return {
           actionType: 'escalate_human',
           reasoning: 'Agent returned an invalid or missing decision for this item — auto-escalated for safety.',
+          messageDraft: '',
+          channel: 'none',
         };
       }
+
+      const hasMessage = decision.actionType === 'send_reminder' || decision.actionType === 'offer_incentive';
 
       return {
         actionType: decision.actionType,
         reasoning: decision.reasoning || 'No reasoning provided by agent.',
+        messageDraft: hasMessage ? (decision.messageDraft || '') : '',
+        channel: hasMessage ? (decision.channel || 'whatsapp') : 'none',
       };
     });
   } catch (err) {
@@ -205,6 +216,8 @@ async function decideBatch(items, retryCount = 0) {
     return items.map(() => ({
       actionType: 'escalate_human',
       reasoning: `Batch agent call failed (${err.message.slice(0, 120)}) — auto-escalated for safety.`,
+      messageDraft: '',
+      channel: 'none',
     }));
   }
 }

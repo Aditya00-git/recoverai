@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const recoveryActionSchema = new mongoose.Schema({
-    targetType: {
+  targetType: {
     type: String, // what this recovery action is for
     enum: ['transaction', 'checkout', 'invoice'],
     required: true,
@@ -18,6 +18,15 @@ const recoveryActionSchema = new mongoose.Schema({
   reasoning: {
     type: String, // the LLM's explanation for why it chose this action (explainability)
     required: true,
+  },
+  messageDraft: {
+    type: String, // the actual generated recovery message (WhatsApp/email text), empty if not applicable
+    default: '',
+  },
+  channel: {
+    type: String, // which channel this message is meant for
+    enum: ['whatsapp', 'email', 'none'],
+    default: 'none',
   },
   attemptNumber: {
     type: Number, // tracks retry count, enforced against stopping rules
