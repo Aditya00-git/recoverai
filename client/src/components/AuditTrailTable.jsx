@@ -11,21 +11,18 @@ const ACTION_LABELS = {
 };
 
 const OUTCOME_META = {
-  success: { label: 'Recovered', color: '#3FBF8F' },
-  failed: { label: 'Failed', color: '#E1654B' },
-  pending: { label: 'Pending', color: '#D4A24C' },
-  stopped_by_rule: { label: 'Stopped', color: '#8B8A85' },
+  success: { label: 'Recovered', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  failed: { label: 'Failed', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' },
+  pending: { label: 'Pending Review', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+  stopped_by_rule: { label: 'Stopped by Rule', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30' },
 };
 
 function OutcomeMark({ outcome }) {
   const meta = OUTCOME_META[outcome] || OUTCOME_META.pending;
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
-      <span
-        className="w-1.5 h-1.5 rounded-full inline-block"
-        style={{ backgroundColor: meta.color }}
-      />
-      <span style={{ color: meta.color }}>{meta.label}</span>
+    <span className={`inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider px-2.5 py-1 rounded-full border ${meta.color} font-semibold`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+      <span>{meta.label}</span>
     </span>
   );
 }
@@ -35,65 +32,66 @@ function AuditTrailTable({ recentActions }) {
 
   if (!recentActions || recentActions.length === 0) {
     return (
-      <div className="bg-panel rounded-lg p-6 border border-hairline text-paper-dim">
-        No recovery actions logged yet.
+      <div className="glass-panel rounded-xl p-8 text-center text-slate-400 font-mono text-sm">
+        No recovery actions logged yet. Click "Run Agent" to process at-risk revenue.
       </div>
     );
   }
 
   return (
-    <div className="bg-panel rounded-lg border border-hairline overflow-hidden">
-      <div className="px-6 py-5 border-b border-hairline flex items-baseline justify-between">
+    <div className="glass-panel rounded-xl overflow-hidden mb-8">
+      <div className="px-6 py-4.5 border-b border-white/[0.08] flex items-center justify-between">
         <div>
-          <h3 className="font-display text-xl">Audit Trail</h3>
-          <p className="text-paper-dim text-xs mt-1 max-w-xl">
-            Immutable log of recovery actions, mandate retry sequences, and natural language explainability.
+          <h3 className="font-display text-xl font-bold text-white tracking-tight">Audit Trail & Reasoning Ledger</h3>
+          <p className="text-slate-400 text-xs mt-0.5">
+            Immutable log of intervention decisions, mandate sequences, and AI explainability.
           </p>
         </div>
-        <span className="font-mono text-[11px] text-paper-dim uppercase tracking-wider shrink-0 ml-4">
-          {recentActions.length} entries
+        <span className="font-mono text-xs font-semibold px-3 py-1 rounded-full bg-slate-800 border border-white/10 text-slate-300">
+          {recentActions.length} Entries Logged
         </span>
       </div>
 
-      <div className="max-h-[560px] overflow-y-auto ledger-scroll">
-        <table className="w-full text-sm">
-          <thead className="bg-panel-raised text-paper-dim sticky top-0">
+      <div className="max-h-[580px] overflow-y-auto modern-scroll">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-[#0F121A] text-slate-300 sticky top-0 z-10 border-b border-white/[0.08]">
             <tr>
-              <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Type</th>
-              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Action & Schedule</th>
-              <th className="text-left px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Reasoning</th>
-              <th className="text-right px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Amount</th>
-              <th className="text-left px-6 py-2.5 font-mono text-[10px] uppercase tracking-widest font-medium">Outcome</th>
+              <th className="px-6 py-3 font-mono text-xs uppercase tracking-wider font-bold text-slate-400">Target</th>
+              <th className="px-4 py-3 font-mono text-xs uppercase tracking-wider font-bold text-slate-400">Action & Schedule</th>
+              <th className="px-4 py-3 font-mono text-xs uppercase tracking-wider font-bold text-slate-400">AI Explainability</th>
+              <th className="px-4 py-3 font-mono text-xs uppercase tracking-wider font-bold text-slate-400 text-right">Amount</th>
+              <th className="px-6 py-3 font-mono text-xs uppercase tracking-wider font-bold text-slate-400">Outcome</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-white/[0.05]">
             {recentActions.map((action) => {
               const hasMessage = action.messageDraft && action.messageDraft.length > 0;
               const hasSchedule = action.retrySchedule && action.retrySchedule.length > 0;
               const hasPtp = action.ptpDate;
 
               return (
-                <tr key={action._id} className="border-t border-hairline/60 hover:bg-panel-raised/50 transition-colors">
-                  <td className="px-6 py-3.5 text-paper-dim capitalize text-xs">
-                    <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-panel border border-hairline">
+                <tr key={action._id} className="hover:bg-white/[0.025] transition-colors">
+                  <td className="px-6 py-4">
+                    <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-800/80 text-slate-200 border border-white/10 capitalize">
                       {action.targetType}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <div className="font-medium text-sm">
+
+                  <td className="px-4 py-4">
+                    <div className="font-semibold text-sm text-white">
                       {ACTION_LABELS[action.actionType] || action.actionType}
                     </div>
 
                     {/* Mandate Schedule Badge */}
                     {hasSchedule && (
-                      <div className="font-mono text-[10px] text-mint mt-1 flex items-center gap-1">
+                      <div className="font-mono text-xs text-cyan-300 mt-1 flex items-center gap-1.5 font-medium bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 w-fit">
                         <span>🔄</span> {action.retrySchedule}
                       </div>
                     )}
 
                     {/* Promise to Pay Badge */}
                     {hasPtp && (
-                      <div className="font-mono text-[10px] text-gold mt-1 flex items-center gap-1">
+                      <div className="font-mono text-xs text-amber-300 mt-1 flex items-center gap-1.5 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 w-fit">
                         <span>📅</span> PTP: {new Date(action.ptpDate).toLocaleDateString('en-IN')}
                       </div>
                     )}
@@ -102,23 +100,28 @@ function AuditTrailTable({ recentActions }) {
                     {hasMessage && (
                       <button
                         onClick={() => setPreviewAction(action)}
-                        className="font-mono text-[10px] uppercase tracking-wider text-gold hover:text-amber mt-1 block"
+                        className="font-mono text-xs uppercase tracking-wider text-amber-400 hover:text-amber-300 font-semibold mt-1.5 flex items-center gap-1 transition-colors"
                       >
                         View Message →
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-3.5 text-paper-dim text-xs leading-relaxed max-w-md">
+
+                  <td className="px-4 py-4 text-slate-300 text-xs leading-relaxed max-w-md">
                     {action.reasoning}
                   </td>
-                  <td className="px-4 py-3.5 text-right font-mono tabular">
+
+                  <td className="px-4 py-4 text-right font-mono text-sm tabular font-semibold">
                     {action.outcome === 'success' ? (
-                      <span style={{ color: '#3FBF8F' }}>{formatRupees(action.amountRecovered)}</span>
+                      <span className="text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20">
+                        {formatRupees(action.amountRecovered)}
+                      </span>
                     ) : (
-                      <span className="text-hairline">—</span>
+                      <span className="text-slate-600">—</span>
                     )}
                   </td>
-                  <td className="px-6 py-3.5">
+
+                  <td className="px-6 py-4">
                     <OutcomeMark outcome={action.outcome} />
                   </td>
                 </tr>

@@ -41,6 +41,10 @@ const invoiceSchema = new mongoose.Schema({
     enum: ['pending', 'overdue', 'paid', 'disputed'],
     default: 'pending',
   },
+    promiseToPayDate: {
+    type: Date, // if set and in the future, dunning is paused (Promise-to-Pay grace period)
+    default: null,
+  },
   source: {
     type: String,
     enum: ['synthetic'], // no real B2B invoicing integration for this prototype — always synthetic

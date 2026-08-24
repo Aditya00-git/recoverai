@@ -23,7 +23,7 @@ function App() {
       setSummary(data);
       setError(null);
     } catch (err) {
-      setError('Could not load dashboard data. Is the backend running?');
+      setError('Could not connect to backend service. Is server running on port 5000?');
     } finally {
       setLoading(false);
     }
@@ -37,7 +37,7 @@ function App() {
       setRunResult(result.batchResult);
       await loadSummary();
     } catch (err) {
-      setError('Agent run failed. Check the backend console for details.');
+      setError('Agent execution failed. Check backend console for details.');
     } finally {
       setRunning(false);
     }
@@ -48,59 +48,68 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-ink text-paper">
-      <div className="max-w-6xl mx-auto px-6 md:px-8 py-10">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-10 pb-6 border-b border-hairline">
+    <div className="min-h-screen bg-[#07080B] text-slate-100 pb-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        {/* Top Header */}
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-white/[0.08]">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold mb-2">
-              Revenue Recovery Ledger
-            </p>
-            <h1 className="font-display text-4xl md:text-5xl italic font-light">
-              RecoverAI
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-400 font-bold">
+                Autonomous Revenue Ops Engine
+              </p>
+            </div>
+            <h1 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight text-white">
+              Recover<span className="text-amber-400">AI</span>
             </h1>
           </div>
-          <div className="flex gap-3 mt-2">
+
+          <div className="flex items-center gap-3">
             <button
               onClick={loadSummary}
-              className="font-mono text-[11px] uppercase tracking-wider px-4 py-2.5 border border-hairline rounded text-paper-dim hover:text-paper hover:border-paper-dim transition-colors"
+              className="font-mono text-xs uppercase tracking-wider px-4 py-2.5 border border-white/15 rounded-xl text-slate-300 hover:text-white hover:border-white/30 hover:bg-white/[0.04] transition-all font-semibold"
             >
               Refresh
             </button>
             <button
               onClick={handleRunAgent}
               disabled={running}
-              className="font-mono text-[11px] uppercase tracking-wider px-4 py-2.5 rounded bg-gold text-ink font-semibold hover:bg-amber disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="font-mono text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"
             >
               {running && (
-                <span className="inline-block w-3 h-3 border-2 border-ink/30 border-t-ink rounded-full animate-spin" />
+                <span className="inline-block w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
               )}
-              {running ? 'Running' : 'Run Agent'}
+              {running ? 'Recovering Revenue...' : 'Run Agent'}
             </button>
           </div>
-        </div>
+        </header>
 
         {loading && (
-          <p className="font-mono text-sm text-paper-dim mb-6">Loading ledger...</p>
+          <div className="glass-panel p-6 rounded-xl text-center mb-8">
+            <p className="font-mono text-sm text-slate-400 animate-pulse">Syncing ledger records & live detection radar...</p>
+          </div>
         )}
+
         {error && (
-          <p className="font-mono text-sm text-rust mb-6">{error}</p>
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 font-mono text-xs mb-8">
+            {error}
+          </div>
         )}
 
         {runResult && (
           <motion.div
-            initial={{ opacity: 0, y: -6 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="border border-gold-dim bg-gold/5 rounded-lg px-6 py-4 mb-8"
+            className="border border-emerald-500/30 bg-emerald-500/10 rounded-xl px-6 py-4 mb-8 shadow-lg shadow-emerald-500/5"
           >
-            <p className="font-mono text-[11px] uppercase tracking-wider text-gold mb-1">
-              Agent Run Complete
+            <p className="font-mono text-xs uppercase tracking-wider text-emerald-400 font-bold mb-1">
+              ✨ Autonomous Recovery Run Completed
             </p>
-            <p className="text-sm text-paper-dim">
-              Processed <span className="text-paper font-medium">{runResult.processedCount}</span> items ·{' '}
-              <span className="text-mint font-medium">{runResult.successCount} succeeded</span> ·{' '}
-              {runResult.stoppedCount} blocked by stopping rules ·{' '}
-              <span className="text-gold font-medium">{formatRupees(runResult.totalRecovered)}</span> recovered this run
+            <p className="text-sm text-slate-300 font-medium">
+              Processed <strong className="text-white">{runResult.processedCount}</strong> at-risk items ·{' '}
+              <strong className="text-emerald-400">{runResult.successCount} recovered</strong> ·{' '}
+              {runResult.stoppedCount} protected by stopping rules ·{' '}
+              <strong className="text-amber-300">{formatRupees(runResult.totalRecovered)}</strong> won back this run
             </p>
           </motion.div>
         )}
@@ -109,24 +118,29 @@ function App() {
           <>
             <HeadlineCards headline={summary.headline} />
 
-            {/* HUMAN-IN-THE-LOOP ESCALATION CENTER */}
-            <EscalationCenter onResolved={loadSummary} />
+            {/* HUMAN ESCALATION COMMAND CENTER */}
+            <EscalationCenter
+              pendingCount={summary.headline?.pendingEscalated}
+              onResolved={loadSummary}
+            />
 
             {/* LIVE SCENARIO SANDBOX */}
             <ScenarioSimulator />
 
+            {/* CHARTS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <ActionBreakdownChart actionTypeBreakdown={summary.actionTypeBreakdown} />
               <FunnelChart funnel={summary.funnel} />
             </div>
 
+            {/* AUDIT TRAIL */}
             <AuditTrailTable recentActions={summary.recentActions} />
           </>
         )}
 
-        <p className="font-mono text-[10px] text-paper-dim/60 text-center mt-10 uppercase tracking-widest">
-          RecoverAI · AI Revenue Recovery · Built for Razorpay AI Builder Internship
-        </p>
+        <footer className="font-mono text-xs text-slate-500 text-center mt-12 pt-6 border-t border-white/[0.06] uppercase tracking-widest">
+          RecoverAI · Built for Razorpay AI Builder Challenge · Autonomous Revenue Operations
+        </footer>
       </div>
     </div>
   );

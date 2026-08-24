@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { motion, useMotionValue, animate } from 'framer-motion';
 import { formatRupees } from '../api/dashboardApi';
 
-// Animates a number counting up from 0 to its final value
 function CountUp({ value, formatter }) {
   const motionValue = useMotionValue(0);
   const [display, setDisplay] = useState(formatter(0));
 
   useEffect(() => {
     const controls = animate(motionValue, value, {
-      duration: 1.1,
+      duration: 1.2,
       ease: [0.16, 1, 0.3, 1],
       onUpdate: (v) => setDisplay(formatter(Math.round(v))),
     });
@@ -19,64 +18,74 @@ function CountUp({ value, formatter }) {
   return <span>{display}</span>;
 }
 
-function LineItem({ eyebrow, value, sub, accent, isFirst, delay }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className={`flex-1 px-6 py-5 ${!isFirst ? 'border-l border-hairline' : ''}`}
-    >
-      <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-paper-dim mb-2">
-        {eyebrow}
-      </p>
-      <p
-        className="font-mono text-2xl md:text-3xl font-medium tabular"
-        style={{ color: accent || 'var(--color-paper)' }}
-      >
-        {value}
-      </p>
-      {sub && <p className="text-xs text-paper-dim mt-1.5">{sub}</p>}
-    </motion.div>
-  );
-}
-
-function HeadlineCards({ headline }) {
+export default function HeadlineCards({ headline }) {
   if (!headline) return null;
 
+  const cards = [
+    {
+      title: 'Revenue At Risk',
+      value: <CountUp value={headline.totalAtRisk} formatter={formatRupees} />,
+      sub: `${headline.itemsFlagged} items flagged across pipeline`,
+      badge: 'Active Leakage',
+      badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      valueColor: 'text-white',
+    },
+    {
+      title: 'Total Recovered',
+      value: <CountUp value={headline.totalRecovered} formatter={formatRupees} />,
+      sub: `${headline.itemsProcessed} automated actions executed`,
+      badge: 'Won Back',
+      badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      valueColor: 'text-emerald-400',
+    },
+    {
+      title: 'Recovery Efficiency',
+      value: <CountUp value={headline.recoveryRate} formatter={(v) => `${v}%`} />,
+      sub: 'Conversion over intervened items',
+      badge: 'Conversion Rate',
+      badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+      valueColor: 'text-cyan-300',
+    },
+    {
+      title: 'Escalations Queue',
+      value: headline.pendingEscalated,
+      sub: 'High-value / formal items requiring review',
+      badge: 'Human-in-Loop',
+      badgeColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+      valueColor: headline.pendingEscalated > 0 ? 'text-rose-400' : 'text-slate-400',
+    },
+  ];
+
   return (
-    <div className="ledger-texture rounded-lg border border-hairline bg-panel mb-10 overflow-hidden">
-      <div className="flex flex-col sm:flex-row">
-        <LineItem
-          isFirst
-          delay={0}
-          eyebrow="Revenue At Risk"
-          value={<CountUp value={headline.totalAtRisk} formatter={formatRupees} />}
-          sub={`${headline.itemsFlagged} items flagged`}
-        />
-        <LineItem
-          delay={0.08}
-          eyebrow="Recovered"
-          value={<CountUp value={headline.totalRecovered} formatter={formatRupees} />}
-          accent="var(--color-mint)"
-          sub={`${headline.itemsProcessed} actions taken`}
-        />
-        <LineItem
-          delay={0.16}
-          eyebrow="Recovery Rate"
-          value={<CountUp value={headline.recoveryRate} formatter={(v) => `${v}%`} />}
-          accent="var(--color-gold)"
-        />
-        <LineItem
-          delay={0.24}
-          eyebrow="Pending Review"
-          value={headline.pendingEscalated}
-          accent="var(--color-rust)"
-          sub="Awaiting human decision"
-        />
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {cards.map((card, idx) => (
+        <motion.div
+          key={idx}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: idx * 0.08 }}
+          className="glass-panel rounded-xl p-5 relative overflow-hidden group hover:border-white/20 transition-all duration-300"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {card.title}
+            </span>
+            <span className={`font-mono text-[11px] px-2 py-0.5 rounded-full border ${card.badgeColor} font-medium`}>
+              {card.badge}
+            </span>
+          </div>
+
+          <div className={`font-display text-2xl sm:text-3xl font-bold tracking-tight tabular mb-2 ${card.valueColor}`}>
+            {card.value}
+          </div>
+
+          <p className="text-xs text-slate-400 font-medium">
+            {card.sub}
+          </p>
+
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.015] rounded-full blur-2xl group-hover:bg-amber-500/5 transition-all duration-500" />
+        </motion.div>
+      ))}
     </div>
   );
 }
-
-export default HeadlineCards;
