@@ -7,6 +7,7 @@ import FunnelChart from './components/FunnelChart';
 import AuditTrailTable from './components/AuditTrailTable';
 import ScenarioSimulator from './components/ScenarioSimulator';
 import EscalationCenter from './components/EscalationCenter';
+import DotBorderButton from './components/DotBorderButton';
 
 const TABS = [
   { id: 'analytics', label: 'Visual Analytics', icon: '📊' },
@@ -93,42 +94,42 @@ function App() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* 1-Click Reset Demo Button */}
-            <button
+          <div className="flex flex-wrap items-center gap-1">
+            {/* 1-Click Reset Demo Button with DotBorder */}
+            <DotBorderButton
+              variant="cyan"
               onClick={handleResetDemo}
               disabled={resetting || running}
-              className="font-mono text-xs uppercase tracking-wider px-3.5 py-2 rounded-lg bg-[#14171F] text-slate-300 border border-white/10 hover:border-white/20 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               title="Resets database to fresh at-risk data so you can test Run Agent from scratch"
             >
               {resetting ? (
-                <span className="inline-block w-3 h-3 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+                <span className="inline-block w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
               ) : (
                 <span className="text-cyan-400">↺</span>
               )}
               <span>{resetting ? 'Resetting...' : 'Reset Demo'}</span>
-            </button>
+            </DotBorderButton>
 
-            {/* Refresh Button */}
-            <button
+            {/* Refresh Button with DotBorder */}
+            <DotBorderButton
+              variant="slate"
               onClick={loadSummary}
               disabled={loading || running}
-              className="font-mono text-xs uppercase tracking-wider px-3.5 py-2 rounded-lg bg-[#14171F] text-slate-300 border border-white/10 hover:border-white/20 hover:text-white transition-all cursor-pointer disabled:opacity-50"
             >
-              Refresh
-            </button>
+              <span>Refresh</span>
+            </DotBorderButton>
 
-            {/* Run Agent Primary Action */}
-            <button
+            {/* Run Agent Primary Action with DotBorder */}
+            <DotBorderButton
+              variant="gold"
               onClick={handleRunAgent}
               disabled={running || resetting}
-              className="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-lg bg-amber-500 text-black font-bold hover:bg-amber-400 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 active:scale-95 shadow-sm"
             >
               {running && (
-                <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                <span className="inline-block w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
               )}
               <span>{running ? 'Processing...' : 'Run Agent →'}</span>
-            </button>
+            </DotBorderButton>
           </div>
         </header>
 
