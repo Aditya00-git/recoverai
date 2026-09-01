@@ -38,3 +38,8 @@ export function formatRupees(paise) {
   const rupees = (paise || 0) / 100;
   return `₹${rupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+// Reset Demo Data
+export async function resetDemoData() {
+  const res = await axios.post(`${API_URL}/api/dashboard/reset`);
+  return res.data;
+}

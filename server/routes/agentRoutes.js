@@ -56,7 +56,6 @@ router.get('/escalations', async (req, res) => {
       outcome: 'pending',
     }).sort({ executedAt: -1 }).lean();
 
-    // Enrich with target item details (customer name, amount, etc.)
     const enriched = await Promise.all(
       pendingActions.map(async (action) => {
         let details = null;
@@ -85,24 +84,26 @@ router.get('/escalations', async (req, res) => {
 router.post('/escalations/:id/resolve', async (req, res) => {
   try {
     const { id } = req.params;
-    const { resolution, customNotes } = req.body; // 'approve_incentive' | 'force_retry' | 'write_off'
+    const { resolution, customNotes } = req.body;
 
     const action = await RecoveryAction.findById(id);
     if (!action) {
       return res.status(404).json({ error: 'Recovery action not found' });
     }
 
-    // Determine target amount for revenue recovery calculation
     let amount = 0;
     if (action.targetType === 'transaction' || action.targetType === 'subscription') {
       const tx = await Transaction.findById(action.targetId);
       amount = tx?.amount || 0;
+      if (resolution !== 'write_off') await Transaction.findByIdAndUpdate(action.targetId, { status: 'captured' });
     } else if (action.targetType === 'invoice') {
       const inv = await Invoice.findById(action.targetId);
       amount = inv?.amount || 0;
+      if (resolution !== 'write_off') await Invoice.findByIdAndUpdate(action.targetId, { status: 'paid' });
     } else if (action.targetType === 'checkout') {
       const ck = await Checkout.findById(action.targetId);
       amount = ck?.cartValue || 0;
+      if (resolution !== 'write_off') await Checkout.findByIdAndUpdate(action.targetId, { status: 'completed' });
     }
 
     let newOutcome = 'success';
@@ -112,7 +113,6 @@ router.post('/escalations/:id/resolve', async (req, res) => {
       newOutcome = 'failed';
       amountRecovered = 0;
     } else if (resolution === 'approve_incentive') {
-      // 95% of invoice recovered after 5% discount settlement
       amountRecovered = Math.round(amount * 0.95);
       newOutcome = 'success';
     } else if (resolution === 'force_retry') {
@@ -125,7 +125,6 @@ router.post('/escalations/:id/resolve', async (req, res) => {
     action.reasoning = `${action.reasoning} | [HUMAN RESOLVED]: ${resolution.replace('_', ' ')}${customNotes ? ` (${customNotes})` : ''}`;
     await action.save();
 
-    // Log the resolution into the permanent audit trail
     await AuditLog.create({
       recoveryActionId: action._id,
       event: 'human_resolution_applied',

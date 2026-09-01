@@ -1,5 +1,8 @@
 const RecoveryAction = require('../models/RecoveryAction');
 const AuditLog = require('../models/AuditLog');
+const Transaction = require('../models/Transaction');
+const Invoice = require('../models/Invoice');
+const Checkout = require('../models/Checkout');
 const { decideBatch } = require('./agentDecision');
 const {
   MAX_RETRY_ATTEMPTS,
@@ -98,6 +101,17 @@ async function saveExecutedAction(item, decision, attemptNumber) {
 
   const outcome = simulateExecution(decision.actionType);
   const amountRecovered = outcome === 'success' ? item.amount : 0;
+
+  // Real-world state transition: mark underlying document as converted/paid!
+  if (outcome === 'success') {
+    if (item.type === 'failed_payment' || item.type === 'failed_subscription') {
+      await Transaction.findByIdAndUpdate(item.targetId, { status: 'captured' });
+    } else if (item.type === 'overdue_invoice') {
+      await Invoice.findByIdAndUpdate(item.targetId, { status: 'paid' });
+    } else if (item.type === 'abandoned_checkout') {
+      await Checkout.findByIdAndUpdate(item.targetId, { status: 'completed' });
+    }
+  }
 
   const action = await RecoveryAction.create({
     targetType: getTargetType(item),
