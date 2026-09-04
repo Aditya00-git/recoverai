@@ -2,7 +2,7 @@ import React from 'react';
 
 export function DotBorderButton({
   children,
-  variant = 'gold', // 'gold' | 'cyan' | 'slate'
+  variant = 'gold', 
   onClick,
   disabled = false,
   className = '',
@@ -256,24 +256,18 @@ export function DotBorderButton({
           cursor: not-allowed;
         }
       `}</style>
-
-      {/* 4 Animated Lines */}
       {!disabled && (
         <>
           <div className="line horizontal top" />
           <div className="line vertical right" />
           <div className="line horizontal bottom" />
           <div className="line vertical left" />
-
-          {/* 4 Corner Dots */}
           <div className="dot top left" />
           <div className="dot top right" />
           <div className="dot bottom right" />
           <div className="dot bottom left" />
         </>
       )}
-
-      {/* Core Button */}
       <button
         type="button"
         disabled={disabled}
@@ -287,3 +281,4 @@ export function DotBorderButton({
 }
 
 export default DotBorderButton;
+

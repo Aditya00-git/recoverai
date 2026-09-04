@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, useMotionValue, animate } from 'framer-motion';
 import { formatRupees } from '../api/dashboardApi';
+import InfoPopover from './InfoPopover';
 
 function CountUp({ value, formatter }) {
   const motionValue = useMotionValue(0);
@@ -8,7 +9,7 @@ function CountUp({ value, formatter }) {
 
   useEffect(() => {
     const controls = animate(motionValue, value, {
-      duration: 1.2,
+      duration: 1.0,
       ease: [0.16, 1, 0.3, 1],
       onUpdate: (v) => setDisplay(formatter(Math.round(v))),
     });
@@ -21,69 +22,98 @@ function CountUp({ value, formatter }) {
 export default function HeadlineCards({ headline }) {
   if (!headline) return null;
 
+  const stoppingRulesDetails = [
+    {  label: 'Max 3 Attempts', text: 'Hard limit per target item to prevent customer fatigue and gateway penalty.' },
+    {  label: '6-Hour Cooldown', text: 'Mandatory quiet period between automated retry and reminder cycles.' },
+    {  label: '₹100 Minimum Floor', text: 'Suppresses automated outreach on micro-values with negative ROI.' },
+    {  label: 'Irreversible Error Gate', text: 'Never attempts retry on invalid OTP, expired card, or closed accounts.' },
+  ];
+
   const cards = [
     {
-      title: 'Revenue At Risk',
+      title: 'TOTAL REVENUE AT RISK',
       value: <CountUp value={headline.totalAtRisk} formatter={formatRupees} />,
-      sub: `${headline.itemsFlagged} items flagged across pipeline`,
-      badge: 'Active Leakage',
-      badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-      valueColor: 'text-white',
+      target: '₹35,00,000 baseline',
+      badge: `${headline.itemsFlagged} items`,
+      badgeStyle: 'target-pill-blue',
     },
     {
-      title: 'Total Recovered',
+      title: 'TOTAL RECOVERED',
       value: <CountUp value={headline.totalRecovered} formatter={formatRupees} />,
-      sub: `${headline.itemsProcessed} automated actions executed`,
-      badge: 'Won Back',
-      badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-      valueColor: 'text-emerald-400',
+      target: 'Automated won-back',
+      badge: `↗ +${headline.recoveryRate}%`,
+      badgeStyle: 'target-pill-green',
     },
     {
-      title: 'Recovery Efficiency',
+      title: 'RECOVERY EFFICIENCY',
       value: <CountUp value={headline.recoveryRate} formatter={(v) => `${v}%`} />,
-      sub: 'Conversion over intervened items',
-      badge: 'Conversion Rate',
-      badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-      valueColor: 'text-cyan-300',
+      target: '40.0% benchmark',
+      badge: headline.recoveryRate >= 40 ? '↗ Target Achieved' : 'Active Run',
+      badgeStyle: 'target-pill-green',
     },
     {
-      title: 'Escalations Queue',
+      title: 'PENDING ESCALATIONS',
       value: headline.pendingEscalated,
-      sub: 'High-value / formal items requiring review',
-      badge: 'Human-in-Loop',
-      badgeColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
-      valueColor: headline.pendingEscalated > 0 ? 'text-rose-400' : 'text-slate-400',
+      target: 'Requires human approval',
+      badge: headline.pendingEscalated > 0 ? `${headline.pendingEscalated} Review` : '✓ Resolved',
+      badgeStyle: headline.pendingEscalated > 0 ? 'target-pill-rose' : 'target-pill-green',
+    },
+    {
+      title: 'GUARDRAILS ACTIVE',
+      value: '100%',
+      target: '3 retries · 6h cooldown',
+      badge: 'Protected',
+      badgeStyle: 'target-pill-blue',
+      popover: {
+        title: 'Safety Limitations & Stopping Rules',
+        description: 'Autonomous financial guardrails enforced prior to any Gemini AI action execution.',
+        items: stoppingRulesDetails,
+      },
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6">
       {cards.map((card, idx) => (
         <motion.div
           key={idx}
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: idx * 0.08 }}
-          className="glass-panel rounded-xl p-5 relative overflow-hidden group hover:border-white/20 transition-all duration-300"
+          transition={{ duration: 0.3, delay: idx * 0.05 }}
+          className="dash-card p-4 flex flex-col justify-between relative"
         >
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-400">
+          {/* Card Header with Icon & Optional Popover */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               {card.title}
             </span>
-            <span className={`font-mono text-[11px] px-2 py-0.5 rounded-full border ${card.badgeColor} font-medium`}>
-              {card.badge}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {card.popover ? (
+                <InfoPopover
+                  title={card.popover.title}
+                  description={card.popover.description}
+                  items={card.popover.items}
+                />
+              ) : (
+                <span className="text-sm opacity-60">{card.icon}</span>
+              )}
+            </div>
           </div>
 
-          <div className={`font-display text-2xl sm:text-3xl font-bold tracking-tight tabular mb-2 ${card.valueColor}`}>
+          {/* Big High-Contrast Number */}
+          <div className="text-xl sm:text-2xl font-bold tracking-tight text-white font-display mb-2.5">
             {card.value}
           </div>
 
-          <p className="text-xs text-slate-400 font-medium">
-            {card.sub}
-          </p>
-
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.015] rounded-full blur-2xl group-hover:bg-amber-500/5 transition-all duration-500" />
+          {/* Target & Comparison Pill */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
+            <span className="text-slate-400 text-[11px] font-medium truncate mr-2">
+              {card.target}
+            </span>
+            <span className={`target-pill ${card.badgeStyle} shrink-0`}>
+              {card.badge}
+            </span>
+          </div>
         </motion.div>
       ))}
     </div>

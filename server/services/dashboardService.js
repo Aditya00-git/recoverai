@@ -12,7 +12,8 @@ async function getDashboardSummary() {
   const totalRecovered = allActions.reduce((sum, a) => sum + (a.amountRecovered || 0), 0);
   const successCount = allActions.filter((a) => a.outcome === 'success').length;
   const failedCount = allActions.filter((a) => a.outcome === 'failed').length;
-  const pendingCount = allActions.filter((a) => a.outcome === 'pending').length;
+  // Specifically count pending human escalations so it 100% matches the Escalation Center
+  const pendingEscalationsCount = allActions.filter((a) => a.actionType === 'escalate_human' && a.outcome === 'pending').length;
   const stoppedCount = allActions.filter((a) => a.outcome === 'stopped_by_rule').length;
 
   const recoveryRate = allActions.length > 0
@@ -52,12 +53,12 @@ async function getDashboardSummary() {
       recoveryRate,
       itemsProcessed: allActions.length,
       itemsFlagged: detectionReport.totalItemsFlagged,
-      pendingEscalated: pendingCount,
+      pendingEscalated: pendingEscalationsCount,
     },
     outcomeBreakdown: {
       success: successCount,
       failed: failedCount,
-      pending: pendingCount,
+      pending: pendingEscalationsCount,
       stoppedByRule: stoppedCount,
     },
     actionTypeBreakdown,

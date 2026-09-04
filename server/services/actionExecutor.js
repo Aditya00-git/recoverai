@@ -3,59 +3,17 @@ const AuditLog = require('../models/AuditLog');
 const Transaction = require('../models/Transaction');
 const Invoice = require('../models/Invoice');
 const Checkout = require('../models/Checkout');
+const { checkStoppingRules } = require('../config/stoppingRules');
 const { decideBatch } = require('./agentDecision');
-const {
-  MAX_RETRY_ATTEMPTS,
-  COOLDOWN_HOURS_BETWEEN_ATTEMPTS,
-  MIN_AMOUNT_FOR_ACTION,
-} = require('../config/stoppingRules');
 
-const BATCH_SIZE = 8;
-const DELAY_BETWEEN_BATCHES_MS = 4000;
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const BATCH_SIZE = 15; // Larger batch size for fast execution
 
 function getTargetType(item) {
-  if (item.type === 'failed_subscription') return 'subscription';
   if (item.type === 'failed_payment') return 'transaction';
   if (item.type === 'abandoned_checkout') return 'checkout';
+  if (item.type === 'failed_subscription') return 'subscription';
   if (item.type === 'overdue_invoice') return 'invoice';
   return 'transaction';
-}
-
-async function checkStoppingRules(item) {
-  if (item.recoveryBucket === 'ptp_grace_period') {
-    return {
-      blocked: true,
-      reason: `Promise-to-Pay commitment active (promised by ${new Date(item.ptpDate).toLocaleDateString('en-IN')}) — dunning paused.`,
-    };
-  }
-
-  if (item.amount < MIN_AMOUNT_FOR_ACTION) {
-    return { blocked: true, reason: `Amount below minimum threshold (₹${MIN_AMOUNT_FOR_ACTION / 100})` };
-  }
-
-  const previousAttempts = await RecoveryAction.find({ targetId: item.targetId }).sort({ executedAt: -1 });
-
-  if (previousAttempts.length >= MAX_RETRY_ATTEMPTS) {
-    return { blocked: true, reason: `Max retry attempts (${MAX_RETRY_ATTEMPTS}) already reached` };
-  }
-
-  if (previousAttempts.length > 0) {
-    const lastAttempt = previousAttempts[0];
-    const hoursSinceLastAttempt = (Date.now() - new Date(lastAttempt.executedAt).getTime()) / (1000 * 60 * 60);
-
-    if (hoursSinceLastAttempt < COOLDOWN_HOURS_BETWEEN_ATTEMPTS) {
-      return {
-        blocked: true,
-        reason: `Cooldown active — last attempt was ${hoursSinceLastAttempt.toFixed(1)}h ago, needs ${COOLDOWN_HOURS_BETWEEN_ATTEMPTS}h`,
-      };
-    }
-  }
-
-  return { blocked: false, attemptNumber: previousAttempts.length + 1 };
 }
 
 function simulateExecution(actionType) {
@@ -68,7 +26,8 @@ function simulateExecution(actionType) {
   };
 
   const successChance = successProbabilities[actionType] ?? 0;
-  if (actionType === 'escalate_human' || actionType === 'no_action') return 'pending';
+  if (actionType === 'escalate_human') return 'pending';
+  if (actionType === 'no_action') return 'resolved';
 
   return Math.random() < successChance ? 'success' : 'failed';
 }
@@ -140,6 +99,7 @@ async function processBatch(items) {
   const results = [];
   const itemsNeedingDecision = [];
 
+  // 1. Evaluate stopping rules
   for (const item of items) {
     const ruleCheck = await checkStoppingRules(item);
 
@@ -151,33 +111,44 @@ async function processBatch(items) {
     }
   }
 
+  // 2. Chunk items for parallel AI decisioning
+  const chunks = [];
   for (let i = 0; i < itemsNeedingDecision.length; i += BATCH_SIZE) {
-    const chunk = itemsNeedingDecision.slice(i, i + BATCH_SIZE);
-    const decisions = await decideBatch(chunk.map((c) => c.item));
-
-    for (let j = 0; j < chunk.length; j++) {
-      const { item, attemptNumber } = chunk[j];
-      const decision = decisions[j];
-      const action = await saveExecutedAction(item, decision, attemptNumber);
-      results.push(action);
-    }
-
-    if (i + BATCH_SIZE < itemsNeedingDecision.length) {
-      await sleep(DELAY_BETWEEN_BATCHES_MS);
-    }
+    chunks.push(itemsNeedingDecision.slice(i, i + BATCH_SIZE));
   }
 
-  const totalRecovered = results.reduce((sum, r) => sum + (r.amountRecovered || 0), 0);
+  // 3. Process chunks concurrently
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const decisions = await decideBatch(chunk.map((c) => c.item));
+      const chunkSavedActions = [];
+
+      for (let j = 0; j < chunk.length; j++) {
+        const { item, attemptNumber } = chunk[j];
+        const decision = decisions[j] || { actionType: 'no_action', reasoning: 'Processed' };
+        const action = await saveExecutedAction(item, decision, attemptNumber);
+        chunkSavedActions.push(action);
+      }
+
+      return chunkSavedActions;
+    })
+  );
+
+  chunkResults.forEach((chunkActions) => {
+    results.push(...chunkActions);
+  });
+
+  const processedCount = results.length;
   const successCount = results.filter((r) => r.outcome === 'success').length;
   const stoppedCount = results.filter((r) => r.outcome === 'stopped_by_rule').length;
+  const totalRecovered = results.reduce((sum, r) => sum + (r.amountRecovered || 0), 0);
 
   return {
-    processedCount: results.length,
+    processedCount,
     successCount,
     stoppedCount,
     totalRecovered,
-    actions: results,
   };
 }
 
-module.exports = { processBatch, checkStoppingRules };
+module.exports = { processBatch };

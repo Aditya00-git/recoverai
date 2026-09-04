@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ark-ui/react": "^5.39.1",
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.19.0",
     "chart.js": "^4.5.1",
     "framer-motion": "^13.1.1",
+    "lucide-react": "^1.39.0",
     "react": "^19.2.8",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.8",
