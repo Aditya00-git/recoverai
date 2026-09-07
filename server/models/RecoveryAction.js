@@ -42,7 +42,7 @@ const recoveryActionSchema = new mongoose.Schema({
   },
   outcome: {
     type: String,
-    enum: ['success', 'failed', 'pending', 'stopped_by_rule'],
+    enum: ['success', 'failed', 'pending', 'stopped_by_rule', 'resolved'],
     default: 'pending',
   },
   amountRecovered: {

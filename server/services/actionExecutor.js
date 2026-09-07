@@ -6,7 +6,11 @@ const Checkout = require('../models/Checkout');
 const { checkStoppingRules } = require('../config/stoppingRules');
 const { decideBatch } = require('./agentDecision');
 
-const BATCH_SIZE = 15; // Larger batch size for fast execution
+const BATCH_SIZE = 25; // Large batch size to stay safely within free-tier RPM limits
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function getTargetType(item) {
   if (item.type === 'failed_payment') return 'transaction';
@@ -111,32 +115,22 @@ async function processBatch(items) {
     }
   }
 
-  // 2. Chunk items for parallel AI decisioning
-  const chunks = [];
+  // 2. Process in large chunks with small delay to strictly respect 5 RPM quota
   for (let i = 0; i < itemsNeedingDecision.length; i += BATCH_SIZE) {
-    chunks.push(itemsNeedingDecision.slice(i, i + BATCH_SIZE));
+    const chunk = itemsNeedingDecision.slice(i, i + BATCH_SIZE);
+    const decisions = await decideBatch(chunk.map((c) => c.item));
+
+    for (let j = 0; j < chunk.length; j++) {
+      const { item, attemptNumber } = chunk[j];
+      const decision = decisions[j] || { actionType: 'no_action', reasoning: 'Processed' };
+      const action = await saveExecutedAction(item, decision, attemptNumber);
+      results.push(action);
+    }
+
+    if (i + BATCH_SIZE < itemsNeedingDecision.length) {
+      await sleep(1000);
+    }
   }
-
-  // 3. Process chunks concurrently
-  const chunkResults = await Promise.all(
-    chunks.map(async (chunk) => {
-      const decisions = await decideBatch(chunk.map((c) => c.item));
-      const chunkSavedActions = [];
-
-      for (let j = 0; j < chunk.length; j++) {
-        const { item, attemptNumber } = chunk[j];
-        const decision = decisions[j] || { actionType: 'no_action', reasoning: 'Processed' };
-        const action = await saveExecutedAction(item, decision, attemptNumber);
-        chunkSavedActions.push(action);
-      }
-
-      return chunkSavedActions;
-    })
-  );
-
-  chunkResults.forEach((chunkActions) => {
-    results.push(...chunkActions);
-  });
 
   const processedCount = results.length;
   const successCount = results.filter((r) => r.outcome === 'success').length;

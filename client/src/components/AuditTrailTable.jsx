@@ -15,6 +15,7 @@ const OUTCOME_META = {
   failed: { label: 'Failed', pill: 'target-pill-rose', dot: 'bg-rose-400' },
   pending: { label: 'Pending Review', pill: 'target-pill-blue', dot: 'bg-blue-400' },
   stopped_by_rule: { label: 'Stopped by Rule', pill: 'target-pill', dot: 'bg-slate-400' },
+  resolved: { label: 'No Action Needed', pill: 'target-pill', dot: 'bg-slate-500' },
 };
 
 function OutcomeMark({ outcome }) {
